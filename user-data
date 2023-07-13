@@ -1,0 +1,74 @@
+#cloud-config
+autoinstall:
+  version: 1
+  apt:
+    disable_components: []
+    geoip: true
+    preserve_sources_list: false
+  updates: security
+  identity:
+    hostname: szut.bis.pasteur.fr
+    password: $6$FuPxZZd8ncDeAvw7$O76.tv.tywvXzLzAIIPkqnkgwMHpdh7SnMEX02EcLl.AP2IgVPGWAou6LHtBaSZkR6zTdflTPjty.S1v0zy60.
+    realname: truadm
+    username: truadm
+  kernel:
+    package: linux-generic
+  keyboard:
+    layout: us
+    toggle: null
+    variant: ''
+  locale: en_US.UTF-8
+  ssh:
+    allow-pw: true
+    authorized-keys: []
+    install-server: true
+  packages:
+  - lftp
+  - curl
+  - tmux
+  - network-manager
+  - rsync
+  - openssh-server
+  user-data:
+    runcmd:
+    - touch /home/hello-runcmd
+    - touch /home/hello-runcmd-done
+    - cd /home/truadm
+    - echo "alias fup='sudo apt update && sudo apt full-upgrade -y && sudo apt autoremove -y'" >> .bashrc
+    - mkdir -p /home/truadm/.ssh
+    - echo 'ecdsa-sha2-nistp256 AAAAE2VjZHNhLXNoYTItbmlzdHAyNTYAAAAIbmlzdHAyNTYAAABBBNdr3nONqUmAaWL9lQqnH58JC1lX+M4AupkxwAEOTHiiHKWA5uIcl8U9FKenprs9qq4IjsEGNAoWtii8pbT69S8= cloud-init-lts2204' >> /home/truadm/.ssh/authorized_keys
+    - chown -R truadm:truadm /home/truadm/.ssh/authorized_keys
+    - chmod 600 /home/truadm/.ssh/authorized_keys
+    - systemctl disable sleep.target suspend.target hibernate.target
+    - systemctl mask sleep.target suspend.target hibernate.target
+  late-commands:
+    - curtin in-target --target /target touch /home/hello-late-commands
+#    # https://bugs.launchpad.net/ubuntu/+source/subiquity/+bug/1963725 BUG
+#    - |
+#      curtin in-target --target / cp /etc/resolv.conf /target/etc/resolv.conf \
+#      && curtin in-target --target /target apt-get update \
+#      && curtin in-target --target /target apt-get upgrade -y \
+#      || /bin/true
+    # https://www.pugetsystems.com/labs/hpc/ubuntu-22-04-server-autoinstall-iso/
+    # Changing from networkd to NetworkManager
+    # move existing config out of the way
+    - find /target/etc/netplan/ -name "*.yaml" -exec sh -c 'mv "$1" "$1-orig"' _ {} \;
+    # Create a new netplan and enable it
+    - |
+      cat <<EOF | sudo tee /target/etc/netplan/01-netcfg.yaml
+      network:
+        version: 2
+        renderer: NetworkManager
+      EOF
+    - curtin in-target --target /target netplan generate
+    - curtin in-target --target /target netplan apply
+    - curtin in-target --target /target systemctl enable NetworkManager.service
+    - curtin in-target --target /target touch /home/hello-late-commands-done
+# allow ssh during installation with password
+# this does not work: password unchanged/random generated
+#
+  chpasswd:
+    expire: false
+    list:
+        - installer:$6$FuPxZZd8ncDeAvw7$O76.tv.tywvXzLzAIIPkqnkgwMHpdh7SnMEX02EcLl.AP2IgVPGWAou6LHtBaSZkR6zTdflTPjty.S1v0zy60.
+        - ubuntu-server:$6$FuPxZZd8ncDeAvw7$O76.tv.tywvXzLzAIIPkqnkgwMHpdh7SnMEX02EcLl.AP2IgVPGWAou6LHtBaSZkR6zTdflTPjty.S1v0zy60.
